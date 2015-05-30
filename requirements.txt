@@ -1,0 +1,6 @@
+The form elements where the user inputs their username, password, password again, and email address must be
+named "username", "password", "verify", and "email", respectively.
+The form method must be POST, not GET.
+Upon invalid user input, your web app should re-render the form for the user.
+Upon valid user input, your web app should redirect to a welcome page for the user.
+This page must include both "Welcome" and the user's username.

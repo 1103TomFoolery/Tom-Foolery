@@ -1,0 +1,27 @@
+application: tom-foolery
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /css
+  static_dir: templates/css
+
+- url: /js
+  static_dir: templates/js
+
+- url: /images
+  static_dir: templates/images
+
+- url: /stylesheets
+  static_dir: stylesheets
+
+- url: /.*
+  script: tom-foolery.app
+
+libraries:
+- name: webapp2
+  version: latest
+- name: jinja2
+  version: latest
