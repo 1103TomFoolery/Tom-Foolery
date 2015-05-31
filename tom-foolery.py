@@ -4,11 +4,15 @@ import re
 import os
 #from google.appengine.api import users
 import jinja2
+from google.appengine.ext import db
+from string import letters
 
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
                                autoescape = True)
 
+# rot13 is a simple cryptographic scheme that replaces the ASCII text with it's value +13 so if you enter the letter 'a'
+# then roto it, it becomes the letter 'n'.  Roto 'n' and it becomes 'a' again and so on.
 def rot13(s):
     chars = "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz"
     trans = chars[26:]+chars[:26]
@@ -18,6 +22,7 @@ def rot13(s):
 def escape_html(s):
     return cgi.escape(s, quote=True)
 
+# Registration
 # password must contain at least one of the following "^.{3,20}$"
 PW_RE = re.compile(r'^.{3,20}$')
 def val_pw(p):
@@ -68,9 +73,6 @@ login = """
 </form>
 """
 
-template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
-                               autoescape = True)
 class Handler(webapp2.RequestHandler):
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
@@ -142,11 +144,83 @@ class Rot13Handler(webapp2.RequestHandler):
         txt = rot13(txt)
         self.write_form(txt)
 
+# The following creates the blog
+
+def render_str(template, **params):
+    t = jinja_env.get_template(template)
+    return t.render(params)
+
+class BlogHandler(webapp2.RequestHandler):
+    def write(self, *a, **kw):
+        self.response.out.write(*a, **kw)
+
+    def render_str(self, template, **params):
+        t = jinja_env.get_template(template)
+        return t.render(params)
+
+    def render(self, template, **kw):
+        self.write(self.render_str(template, **kw))
+
+def render_post(response, post):
+    response.out.write('<b>' + post.subject + '</b><br>')
+    response.out.write(post.content)
+
+def blog_key(name = 'default'):
+    return db.Key.from_path('blogs', name)
+
+# parentPost = db.Key.from_path('Content', 'default')
+
+class Post(db.Model):
+    subject = db.StringProperty(required = True)
+    content = db.TextProperty(required = True)
+    created = db.DateTimeProperty(auto_now_add = True)
+    last_modified = db.DateTimeProperty(auto_now = True)
+
+    def render(self):
+        self._render_text = self.content.replace('\n', '<br>')
+        return render_str("post.html", p=self)
+
+class Blog(BlogHandler):
+    def get(self):
+        posts = db.GqlQuery("select * from Post "
+                            "order by created desc "
+                            "limit 10")
+        # posts = Post.all().order('-created')
+
+        self.render("blog.html", posts=posts)
+
+class NewPost(BlogHandler):
+    def get(self):
+        self.render("newpost.html")
+
+    def post(self):
+        subject = self.request.get("subject")
+        content = self.request.get("content")
+
+        if subject and content:
+            p = Post(parent=blog_key(), subject=subject, content=content)
+            p.put()
+            self.redirect("/blog/%s" % str(p.key().id()))
+        else:
+            error = "we need both a subject and some content"
+            self.render_newpost(subject, content, error)
+
+class PostPage(BlogHandler):
+    def get(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+
+        if not post:
+            self.error(404)
+            return
+        self.render("permalink.html", post=post)
 
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/regpage',RegPage),
     ('/rot13', Rot13Handler),
-    ('/blog', BlogHandler)
+    ('/blog/?', Blog),
+    ('/blog/newpost', NewPost),
+    ('/blog/([0-9]+)', PostPage)
 ], debug=True)
 
